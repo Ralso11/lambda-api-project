@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Random Quote API</title>
+  <style>
+    body {
+      font-family: -apple-system, Segoe UI, Roboto, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+      text-align: center;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .card {
+      max-width: 560px;
+    }
+    h1 { color: #38bdf8; margin-bottom: 8px; }
+    p.sub { color: #64748b; margin-top: 0; }
+    #quote {
+      font-size: 1.4rem;
+      margin: 32px 0;
+      min-height: 80px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    button {
+      background: #38bdf8;
+      color: #0f172a;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    button:hover { background: #7dd3fc; }
+    button:disabled { opacity: 0.5; cursor: default; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Random Quote API</h1>
+    <p class="sub">Served live by AWS Lambda + API Gateway, via Terraform + CI/CD.</p>
+    <div id="quote">Click the button to fetch a quote.</div>
+    <button id="fetchBtn">New quote</button>
+  </div>
+
+  <script>
+    // Replace this with your own API Gateway URL from the pipeline output
+    const API_URL = "https://x9xy59quyh.execute-api.eu-central-1.amazonaws.com/quote";
+
+    const quoteEl = document.getElementById("quote");
+    const btn = document.getElementById("fetchBtn");
+
+    async function fetchQuote() {
+      btn.disabled = true;
+      quoteEl.textContent = "Loading...";
+      try {
+        const res = await fetch(API_URL);
+        const data = await res.json();
+        quoteEl.textContent = `"${data.quote}"`;
+      } catch (err) {
+        quoteEl.textContent = "Could not reach the API. Try again.";
+      }
+      btn.disabled = false;
+    }
+
+    btn.addEventListener("click", fetchQuote);
+  </script>
+</body>
+</html>

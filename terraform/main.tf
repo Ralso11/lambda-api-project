@@ -41,6 +41,12 @@ resource "aws_lambda_function" "quote_api" {
 resource "aws_apigatewayv2_api" "quote_api" {
   name          = "${var.project_name}-${var.environment}-api"
   protocol_type = "HTTP"
+
+  cors_configuration {
+    allow_origins = ["*"]
+    allow_methods = ["GET"]
+    allow_headers = ["content-type"]
+  }
 }
 
 resource "aws_apigatewayv2_integration" "lambda" {
