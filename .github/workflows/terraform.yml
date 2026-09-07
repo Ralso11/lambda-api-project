@@ -6,6 +6,8 @@ on:
   pull_request:
     branches: [main]
 
+  workflow_dispatch:
+
 jobs:
   plan:
     runs-on: ubuntu-latest
@@ -41,7 +43,7 @@ jobs:
 
   apply:
     needs: plan
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     environment: production
     defaults:
