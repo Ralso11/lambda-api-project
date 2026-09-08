@@ -76,3 +76,93 @@ resource "aws_lambda_permission" "api_gw" {
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_apigatewayv2_api.quote_api.execution_arn}/*/*"
 }
+
+# --- SNS topic: sends email notifications when the alarm fires ---
+
+resource "aws_sns_topic" "alerts" {
+  name = "${var.project_name}-alerts"
+}
+
+resource "aws_sns_topic_subscription" "email_alert" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+
+# --- CloudWatch Alarm: watches for Lambda errors ---
+
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  alarm_name          = "${var.project_name}-lambda-errors"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 1
+  metric_name         = "Errors"
+  namespace           = "AWS/Lambda"
+  period              = 300
+  statistic           = "Sum"
+  threshold           = 0
+  alarm_description   = "Triggers when the Lambda function has any errors"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+
+  dimensions = {
+    FunctionName = aws_lambda_function.quote_api.function_name
+  }
+}
+
+# --- CloudWatch Dashboard: visual overview of the API's health ---
+
+resource "aws_cloudwatch_dashboard" "main" {
+  dashboard_name = "${var.project_name}-dashboard"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type   = "metric"
+        x      = 0
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Lambda Invocations"
+          region = var.aws_region
+          metrics = [
+            ["AWS/Lambda", "Invocations", "FunctionName", aws_lambda_function.quote_api.function_name]
+          ]
+          stat   = "Sum"
+          period = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 12
+        y      = 0
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Lambda Errors"
+          region = var.aws_region
+          metrics = [
+            ["AWS/Lambda", "Errors", "FunctionName", aws_lambda_function.quote_api.function_name]
+          ]
+          stat   = "Sum"
+          period = 300
+        }
+      },
+      {
+        type   = "metric"
+        x      = 0
+        y      = 6
+        width  = 12
+        height = 6
+        properties = {
+          title  = "Lambda Duration (ms)"
+          region = var.aws_region
+          metrics = [
+            ["AWS/Lambda", "Duration", "FunctionName", aws_lambda_function.quote_api.function_name]
+          ]
+          stat   = "Average"
+          period = 300
+        }
+      }
+    ]
+  })
+}
