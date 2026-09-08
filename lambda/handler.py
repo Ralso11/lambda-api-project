@@ -11,8 +11,9 @@ QUOTES = [
 
 
 def handler(event, context):
-    quote = random.choice(QUOTES)
+    raise Exception("Intentional test error to verify the CloudWatch alarm")
 
+    quote = random.choice(QUOTES)
     return {
         "statusCode": 200,
         "headers": {
