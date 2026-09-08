@@ -78,3 +78,30 @@ Browser → GitHub Pages (demo page) → fetch() → API Gateway → Lambda → 
       backed by DynamoDB).
 - [ ] Add request throttling / a usage plan on API Gateway.
 - [ ] Add automated tests for the Lambda function before deploy.
+
+## Monitoring (added after initial deployment)
+
+This project includes a CloudWatch Dashboard, an error alarm, and an
+SNS email subscription — added specifically to complete the "watch it
+run" part of the DevOps picture, which none of the other portfolio
+projects had yet.
+
+- **CloudWatch Dashboard** — three widgets: invocations, errors, and
+  average duration, all pulled from the Lambda function's built-in
+  metrics.
+- **CloudWatch Alarm** — triggers if the function has *any* error
+  within a 5-minute window.
+
+- **SNS Topic + email subscription** - sends a real email when the
+  alarm fires. Requires a one-time confirmation click in the
+  subscription email AWS sends.
+
+**Tested for real**: temporarily deployed a version of the Lambda
+function that always throws an error, triggered it a few times, and
+confirmed the alarm fired and the email arrived - not just deployed
+and assumed working.
+
+**IAM note**: this required two new managed policies
+(AmazonSNSFullAccess, CloudWatchFullAccess) added to the existing
+lambda-deployer user, since monitoring was outside its original
+scope.
