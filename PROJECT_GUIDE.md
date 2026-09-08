@@ -266,3 +266,198 @@ the steps" — which is exactly what interviewers are listening for.
 
 *This document, together with the repo's README.md, covers everything
 needed to fully understand, explain, and rebuild this project.*
+
+## Part 11 - Monitoring: the missing DevOps piece, added after the fact
+
+Every project in this portfolio covered Infrastructure as Code and
+CI/CD - but none had monitoring, the third core piece of "DevOps"
+(build it, deploy it safely, and watch it run). This section covers
+what was added to close that gap.
+
+### CloudWatch Dashboard
+
+A dashboard is just a saved, visual arrangement of metrics. This one
+has three widgets, each pulling directly from metrics AWS Lambda
+already tracks automatically - no extra code needed in the function
+itself:
+
+```hcl
+resource "aws_cloudwatch_dashboard" "main" {
+  dashboard_body = jsonencode({
+    widgets = [
+      { title = "Lambda Invocations", ... },
+      { title = "Lambda Errors", ... },
+      { title = "Lambda Duration (ms)", ... }
+    ]
+  })
+}
+```
+
+`dashboard_body` is written as JSON (via `jsonencode`) because
+CloudWatch's dashboard format is JSON natively - Terraform is just
+passing that structure through.
+
+### CloudWatch Alarm
+
+```hcl
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  comparison_operator = "GreaterThanThreshold"
+  metric_name          = "Errors"
+  namespace            = "AWS/Lambda"
+  threshold            = 0
+  alarm_actions        = [aws_sns_topic.alerts.arn]
+}
+```
+
+This watches the same "Errors" metric shown on the dashboard, checking
+every 5 minutes (`period = 300`). `threshold = 0` combined with
+`GreaterThanThreshold` means "trigger on any error at all, even one" -
+a deliberately sensitive setting appropriate for a small demo API.
+`alarm_actions` is what actually connects the alarm to a real
+notification - without it, the alarm would just sit there, visible
+but silent.
+
+### SNS: the notification itself
+
+```hcl
+resource "aws_sns_topic" "alerts" { ... }
+resource "aws_sns_topic_subscription" "email_alert" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+```
+
+SNS (Simple
+EOF#
+
+## Part 11 - Monitoring: the missing DevOps piece, added after the fact
+
+Every project in this portfolio covered Infrastructure as Code and
+CI/CD - but none had monitoring, the third core piece of "DevOps"
+(build it, deploy it safely, and watch it run). This section covers
+what was added to close that gap.
+
+### CloudWatch Dashboard
+
+A dashboard is just a saved, visual arrangement of metrics. This one
+has three widgets, each pulling directly from metrics AWS Lambda
+already tracks automatically - no extra code needed in the function
+itself:
+
+```hcl
+resource "aws_cloudwatch_dashboard" "main" {
+  dashboard_body = jsonencode({
+    widgets = [
+      { title = "Lambda Invocations", ... },
+      { title = "Lambda Errors", ... },
+      { title = "Lambda Duration (ms)", ... }
+    ]
+  })
+}
+```
+
+`dashboard_body` is written as JSON (via `jsonencode`) because
+CloudWatch's dashboard format is JSON natively - Terraform is just
+passing that structure through.
+
+### CloudWatch Alarm
+
+```hcl
+resource "aws_cloudwatch_metric_alarm" "lambda_errors" {
+  comparison_operator = "GreaterThanThreshold"
+  metric_name          = "Errors"
+  namespace            = "AWS/Lambda"
+  threshold            = 0
+  alarm_actions        = [aws_sns_topic.alerts.arn]
+}
+```
+
+This watches the same "Errors" metric shown on the dashboard, checking
+every 5 minutes (`period = 300`). `threshold = 0` combined with
+`GreaterThanThreshold` means "trigger on any error at all, even one" -
+a deliberately sensitive setting appropriate for a small demo API.
+`alarm_actions` is what actually connects the alarm to a real
+notification - without it, the alarm would just sit there, visible
+but silent.
+
+### SNS: the notification itself
+
+```hcl
+resource "aws_sns_topic" "alerts" { ... }
+resource "aws_sns_topic_subscription" "email_alert" {
+  topic_arn = aws_sns_topic.alerts.arn
+  protocol  = "email"
+  endpoint  = var.alert_email
+}
+```
+
+SNS (Simple Notification Service) is AWS's general-purpose
+"broadcast a message" system. A "topic" is the channel; a
+"subscription" is one specific way of receiving messages sent to it -
+here, email. AWS requires a one-time human confirmation click before
+an email subscription actually starts delivering, as a spam-prevention
+measure - the alarm would otherwise silently have no real destination.
+
+### Keeping the email address private
+
+`alert_email` was deliberately given no default value in
+`variables.tf`, and its real value was never written into any file in
+the repository. Instead, it was stored as a GitHub Secret
+(`ALERT_EMAIL`) and passed into Terraform via a specially-named
+environment variable in the pipeline:
+
+```yaml
+env:
+  TF_VAR_alert_email: ${{ secrets.ALERT_EMAIL }}
+```
+
+Terraform automatically looks for environment variables prefixed
+`TF_VAR_` and maps them to matching variable names - so
+`TF_VAR_alert_email` fills `var.alert_email` without that value ever
+appearing in code, commit history, or logs.
+
+### Proving it actually works, not just deploying it
+
+Rather than trust that the alarm would work once deployed, it was
+tested for real:
+1. The Lambda function's code was temporarily replaced with a version
+   that always throws an exception.
+2. That broken version was deployed through the normal pipeline.
+3. The API was called several times via `curl`, generating real
+   errors.
+4. Within a few minutes, the alarm fired and a real email arrived.
+5. The original, working code was restored and redeployed.
+6. The API was called once more to confirm it was healthy again.
+
+This is a meaningfully different (and better) standard than "the
+Terraform apply succeeded" - it's proof the entire alerting chain
+(metric to alarm to SNS to inbox) actually functions, which is the
+part that would matter in a real incident.
+
+### The IAM gap this revealed
+
+Deploying the monitoring resources initially failed with
+`AccessDenied` on both `SNS:CreateTopic` and
+`cloudwatch:PutDashboard` - the `lambda-deployer` IAM user had never
+needed those permissions before, since monitoring was new territory
+for this project. Fixed by attaching two AWS managed policies,
+`AmazonSNSFullAccess` and `CloudWatchFullAccess` - the same "managed
+policy for a naturally contained service" reasoning used throughout
+this portfolio, since neither service can be used to escalate
+privileges beyond itself.
+
+## Part 12 - Explaining this addition in an interview
+
+> "After building several projects covering infrastructure as code and
+> CI/CD, I realized none of them actually monitored anything - so I
+> added a CloudWatch dashboard, an error alarm, and an SNS email
+> notification to my serverless API project. I didn't just deploy it
+> and assume it worked - I deliberately broke the function, triggered
+> real errors, and confirmed I actually received the alarm email,
+> before reverting and redeploying the working version. I also made
+> sure the alert email itself was never stored in code, passing it
+> through as a GitHub Secret instead."
+
+That's a genuinely complete demonstration of the full DevOps loop -
+build, deploy safely, and know when something breaks.
