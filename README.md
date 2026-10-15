@@ -29,8 +29,14 @@ Two new concepts this project adds on top of the first:
 
 ## Architecture
 
-```
-Browser → GitHub Pages (demo page) → fetch() → API Gateway → Lambda → JSON response
+```mermaid
+flowchart LR
+    B["Browser<br/>(GitHub Pages demo)"] -->|"GET /quote (CORS)"| API["API Gateway<br/>HTTP API"]
+    API --> L["Lambda<br/>random quote (Python)"]
+    L -->|"JSON response"| API
+    L -.->|"logs and Errors metric"| CW["CloudWatch<br/>dashboard and alarm"]
+    CW -.->|"alarm"| SNS["SNS topic"]
+    SNS -.->|"email"| M["Email alert"]
 ```
 
 - **AWS Lambda** — a small Python function that picks a random quote and
